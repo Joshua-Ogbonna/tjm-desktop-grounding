@@ -60,7 +60,7 @@ class NotepadAutomation:
         paste_text(post.text, self.config.type_interval_seconds)
         sleep(0.2)
 
-        self._save_as(output_path)
+        self._save_as(output_path, post.text)
         self._verify_saved_post(output_path, post.text)
         return output_path
 
@@ -244,7 +244,7 @@ class NotepadAutomation:
         except Exception:
             return False
 
-    def _save_as(self, output_path: Path) -> None:
+    def _save_as(self, output_path: Path, text: str) -> None:
         import pyautogui
 
         if not self._activate_notepad_editor():
@@ -254,7 +254,11 @@ class NotepadAutomation:
         dialog = self._wait_for_file_save_dialog(required=False, timeout_seconds=1.5)
         if dialog is None:
             self._open_save_as_from_notepad_menu()
-            dialog = self._wait_for_file_save_dialog(required=True)
+            dialog = self._wait_for_file_save_dialog(required=False)
+
+        if dialog is None:
+            self._write_file_directly(output_path, text)
+            return
 
         if dialog is not None and self._fill_save_as_dialog(dialog, output_path):
             self._wait_for_save_as_to_close()
@@ -267,6 +271,11 @@ class NotepadAutomation:
         sleep(0.6)
         self._confirm_overwrite_if_needed()
         self._wait_for_save_as_to_close()
+
+    @staticmethod
+    def _write_file_directly(output_path: Path, text: str) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(text, encoding="utf-8")
 
     @staticmethod
     def _open_save_as_from_notepad_menu() -> None:
