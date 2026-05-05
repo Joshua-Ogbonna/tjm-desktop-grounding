@@ -221,6 +221,8 @@ def target_match_score(target: str, observed: str) -> float:
         return 1.0
     if observed.startswith(target):
         return 0.72
+    if len(observed) < min(4, len(target)):
+        return 0.0
     if target in observed or observed in target:
         return 0.55
     return 0.0
