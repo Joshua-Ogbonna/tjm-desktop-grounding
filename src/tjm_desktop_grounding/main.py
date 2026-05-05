@@ -40,6 +40,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Only capture, ground, and optionally annotate. Do not click or type.",
     )
+    parser.add_argument(
+        "--screen-info",
+        action="store_true",
+        help="Print screenshot and coordinate-system diagnostics, then exit.",
+    )
     return parser
 
 
@@ -54,6 +59,10 @@ def main() -> None:
     automation = NotepadAutomation(config)
 
     try:
+        if args.screen_info:
+            show_screen_info()
+            return
+
         if not args.dry_run:
             posts = fetch_posts(limit=args.limit)
             if not posts:
@@ -115,6 +124,37 @@ def show_written_files(paths: list[Path]) -> None:
     print("Saved Files:")
     for path in paths:
         print(f"- {path}")
+
+
+def show_screen_info() -> None:
+    from tjm_desktop_grounding.screenshot import capture_screen, get_screen_diagnostics
+
+    image = capture_screen()
+    diagnostics = get_screen_diagnostics()
+    print(f"Screenshot size: {image.width}x{image.height}")
+
+    pyautogui_size = diagnostics.get("pyautogui_size")
+    if pyautogui_size:
+        print(
+            "PyAutoGUI coordinate size: "
+            f"{pyautogui_size['width']}x{pyautogui_size['height']}"
+        )
+        if (image.width, image.height) != (
+            pyautogui_size["width"],
+            pyautogui_size["height"],
+        ):
+            print(
+                "Warning: screenshot pixels and click coordinates differ. "
+                "Set Windows display Scale to 100% for this assessment."
+            )
+
+    for monitor in diagnostics.get("mss_monitors", []):
+        print(
+            "MSS monitor "
+            f"{monitor['index']}: "
+            f"{monitor['width']}x{monitor['height']} "
+            f"at ({monitor['left']}, {monitor['top']})"
+        )
 
 
 if __name__ == "__main__":

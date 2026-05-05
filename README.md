@@ -51,6 +51,17 @@ Dry-run grounding only:
 uv run tjm-ground --dry-run --annotate screenshots/notepad_detected.png
 ```
 
+Check the active capture/click resolution:
+
+```bash
+uv run tjm-ground --screen-info
+```
+
+For the assessment environment, the screenshot size and PyAutoGUI coordinate
+size should both be `1920x1080`. If they differ, set Windows **Display
+resolution** to `1920 x 1080` and **Scale** to `100%` in Settings > System >
+Display, then rerun the diagnostic command.
+
 Use a visual template fallback:
 
 ```bash
@@ -104,6 +115,11 @@ The implementation uses a cascade:
      Windows UI Automation and still returns a grounded screen coordinate.
    - This is a last resort for noisy wallpapers or low-contrast labels; the
      visual path remains first.
+
+5. **Explorer desktop-list fallback**
+   - As a final recovery path, reads the desktop `SysListView32` icon rectangle
+     from Explorer. This prevents a total failure when OCR cannot read a label
+     on a very busy wallpaper.
 
 The structure is inspired by modern high-resolution GUI grounding work such as
 ScreenSpot-Pro / ScreenSeekeR: reduce the search space first, then do finer

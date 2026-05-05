@@ -78,6 +78,10 @@ class DesktopGrounder:
         if template_result is not None:
             return template_result
 
+        shell_result = self._locate_with_explorer_listview(screenshot_path)
+        if shell_result is not None:
+            return shell_result
+
         uia_result = self._locate_with_windows_uia(screenshot_path)
         if uia_result is not None:
             return uia_result
@@ -114,11 +118,10 @@ class DesktopGrounder:
                 continue
 
             for word in iter_ocr_words(data, scale=scale):
-                if word.confidence < 35:
-                    continue
-
                 match_score = target_match_score(target, word.normalized_text)
                 if match_score == 0:
+                    continue
+                if word.confidence < minimum_ocr_confidence(match_score):
                     continue
 
                 bbox, center = infer_desktop_item_from_label(word.bbox)
@@ -196,6 +199,10 @@ class DesktopGrounder:
                         if match_score == 0:
                             continue
                         match_words = words
+                    if average_confidence(match_words) < minimum_ocr_confidence(
+                        match_score
+                    ):
+                        continue
 
                     label_bbox = union_boxes([word.bbox for word in match_words])
                     item_bbox = union_boxes([candidate, label_bbox])
@@ -216,6 +223,82 @@ class DesktopGrounder:
                     if confidence >= 0.50:
                         return result
                     matches.append(result)
+
+        if not matches:
+            return None
+
+        return max(matches, key=lambda result: result.confidence)
+
+    def _locate_with_explorer_listview(
+        self, screenshot_path: Path
+    ) -> GroundingResult | None:
+        try:
+            from pywinauto import Desktop
+        except ImportError:
+            return None
+
+        target = normalize_text(self.options.target)
+        matches: list[GroundingResult] = []
+
+        try:
+            windows = Desktop(backend="win32").windows()
+        except Exception:
+            return None
+
+        for window in windows:
+            try:
+                if window.class_name() not in {"Progman", "WorkerW"}:
+                    continue
+                list_views = window.descendants(class_name="SysListView32")
+            except Exception:
+                continue
+
+            for list_view in list_views:
+                try:
+                    items = list_view.items()
+                except Exception:
+                    continue
+
+                for item in items:
+                    try:
+                        text = item.text()
+                    except Exception:
+                        continue
+
+                    match_score = target_match_score(target, normalize_text(text))
+                    if match_score == 0:
+                        continue
+
+                    try:
+                        rectangle = item.rectangle()
+                    except Exception:
+                        continue
+
+                    width = max(1, int(rectangle.right - rectangle.left))
+                    height = max(1, int(rectangle.bottom - rectangle.top))
+                    if width > 300 or height > 220:
+                        continue
+
+                    bbox = BoundingBox(
+                        left=int(rectangle.left),
+                        top=int(rectangle.top),
+                        width=width,
+                        height=height,
+                    )
+                    matches.append(
+                        GroundingResult(
+                            target=self.options.target,
+                            bbox=bbox,
+                            center=bbox.center,
+                            confidence=0.78 * match_score,
+                            method="shell",
+                            screenshot_path=screenshot_path,
+                            note=(
+                                "Explorer's desktop icon list matched the item after "
+                                "visual OCR/template matching did not."
+                            ),
+                        )
+                    )
 
         if not matches:
             return None
@@ -528,6 +611,14 @@ def target_match_score(target: str, observed: str) -> float:
     if similarity >= 0.84:
         return 0.60
     return 0.0
+
+
+def minimum_ocr_confidence(match_score: float) -> float:
+    if match_score >= 1.0:
+        return 8.0
+    if match_score >= 0.60:
+        return 18.0
+    return 30.0
 
 
 def parse_confidence(value: object) -> float:

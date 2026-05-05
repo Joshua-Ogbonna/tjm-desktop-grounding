@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Literal
 
 
-GroundingMethod = Literal["ocr", "template", "candidate", "uia"]
+GroundingMethod = Literal["ocr", "template", "candidate", "shell", "uia"]
 
 
 @dataclass(frozen=True)
