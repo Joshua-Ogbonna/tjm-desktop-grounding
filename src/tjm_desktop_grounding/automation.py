@@ -37,8 +37,12 @@ class NotepadAutomation:
     def wait_for_notepad(self, existing_handles: set[int] | None = None) -> None:
         existing_handles = existing_handles or set()
         deadline = monotonic() + self.config.launch_timeout_seconds
+        fallback_deadline = monotonic() + 2.0
         while monotonic() < deadline:
-            if self._focus_notepad(prefer_newer_than=existing_handles, allow_fallback=not existing_handles):
+            if self._focus_notepad(
+                prefer_newer_than=existing_handles,
+                allow_fallback=not existing_handles or monotonic() >= fallback_deadline,
+            ):
                 sleep(0.4)
                 return
             sleep(0.2)
@@ -50,7 +54,8 @@ class NotepadAutomation:
         self.config.save_directory.mkdir(parents=True, exist_ok=True)
         output_path = self.config.save_directory / f"post_{post.id}.txt"
 
-        self._focus_notepad()
+        if not self._activate_notepad_editor():
+            raise AutomationError("Could not focus Notepad's text area before typing.")
         pyautogui.hotkey("ctrl", "a")
         paste_text(post.text, self.config.type_interval_seconds)
         sleep(0.2)
@@ -137,15 +142,115 @@ class NotepadAutomation:
         return self._focus_window(window, handle)
 
     def _focus_window(self, window, handle: int) -> bool:
+        focused = False
+
+        try:
+            window.restore()
+        except Exception:
+            pass
+
+        try:
+            window.set_focus()
+            focused = True
+        except Exception:
+            pass
+
+        try:
+            window.click_input()
+            focused = True
+        except Exception:
+            pass
+
+        if not focused:
+            return False
+
+        self.active_notepad_handle = handle
+        sleep(0.2)
+        return True
+
+    def _active_notepad_window(self):
+        try:
+            from pywinauto import Desktop
+        except ImportError:
+            return None
+
+        try:
+            windows = Desktop(backend="uia").windows()
+        except Exception:
+            return None
+
+        fallback_window = None
+        for window in windows:
+            try:
+                title = window.window_text().casefold()
+                handle = int(window.handle)
+            except Exception:
+                continue
+            if "notepad" not in title:
+                continue
+            if self.active_notepad_handle is not None and handle == self.active_notepad_handle:
+                return window
+            if fallback_window is None:
+                fallback_window = window
+
+        return fallback_window
+
+    def _activate_notepad_editor(self) -> bool:
+        import pyautogui
+
+        if not self._focus_notepad():
+            return False
+
+        window = self._active_notepad_window()
+        if window is None:
+            return True
+
+        try:
+            window.restore()
+        except Exception:
+            pass
+
         try:
             window.set_focus()
         except Exception:
+            pass
+
+        for control_type in ("Document", "Edit"):
+            try:
+                controls = window.descendants(control_type=control_type)
+            except Exception:
+                controls = []
+
+            for control in controls:
+                try:
+                    rect = control.rectangle()
+                except Exception:
+                    continue
+                if rect.width() < 100 or rect.height() < 60:
+                    continue
+                try:
+                    control.click_input()
+                    sleep(0.2)
+                    return True
+                except Exception:
+                    continue
+
+        try:
+            rect = window.rectangle()
+            pyautogui.click(
+                rect.left + rect.width() // 2,
+                rect.top + max(90, rect.height() // 2),
+            )
+            sleep(0.2)
+            return True
+        except Exception:
             return False
-        self.active_notepad_handle = handle
-        return True
 
     def _save_as(self, output_path: Path) -> None:
         import pyautogui
+
+        if not self._activate_notepad_editor():
+            raise AutomationError("Could not focus Notepad before opening Save As.")
 
         pyautogui.hotkey("ctrl", "s")
         dialog = self._wait_for_file_save_dialog(required=False, timeout_seconds=1.5)
