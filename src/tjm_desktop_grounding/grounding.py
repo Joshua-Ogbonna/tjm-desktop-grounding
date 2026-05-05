@@ -63,11 +63,13 @@ class DesktopGrounder:
 
         candidates = self.detect_icon_candidates(image)
         if candidates:
+            ocr_note = self._ocr_debug_note(image)
             raise GroundingError(
-                f"Found {len(candidates)} icon-like regions, but none matched {self.options.target!r}."
+                f"Found {len(candidates)} icon-like regions, but none matched "
+                f"{self.options.target!r}. Screenshot: {screenshot_path}. {ocr_note}"
             )
 
-        raise GroundingError("No icon-like regions were found.")
+        raise GroundingError(f"No icon-like regions were found. Screenshot: {screenshot_path}.")
 
     def _locate_with_ocr(
         self, image: Image.Image, screenshot_path: Path
@@ -125,6 +127,38 @@ class DesktopGrounder:
             return None
 
         return max(matches, key=lambda result: result.confidence)
+
+    @staticmethod
+    def _ocr_debug_note(image: Image.Image) -> str:
+        try:
+            import pytesseract
+        except ImportError:
+            return "OCR is unavailable because pytesseract is not installed."
+
+        try:
+            data = pytesseract.image_to_data(
+                image,
+                output_type=pytesseract.Output.DICT,
+                config="--psm 11",
+            )
+        except Exception as exc:
+            return f"OCR failed: {exc}"
+
+        words: list[str] = []
+        for index, raw_text in enumerate(data.get("text", [])):
+            text = str(raw_text).strip()
+            if not text:
+                continue
+            confidence = parse_confidence(data.get("conf", ["0"])[index])
+            if confidence < 20:
+                continue
+            words.append(f"{text!r}:{confidence:.0f}")
+            if len(words) >= 12:
+                break
+
+        if not words:
+            return "OCR saw no readable text."
+        return f"OCR saw: {', '.join(words)}."
 
     def _locate_with_template(
         self, image: Image.Image, screenshot_path: Path
