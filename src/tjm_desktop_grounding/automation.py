@@ -143,6 +143,7 @@ class NotepadAutomation:
 
     def _focus_window(self, window, handle: int) -> bool:
         focused = False
+        rect = None
 
         try:
             window.restore()
@@ -156,7 +157,24 @@ class NotepadAutomation:
             pass
 
         try:
-            window.click_input()
+            rect = window.rectangle()
+        except Exception:
+            rect = None
+
+        if rect is not None:
+            try:
+                import pyautogui
+
+                pyautogui.click(
+                    rect.left + min(220, max(80, rect.width() // 2)),
+                    rect.top + min(180, max(90, rect.height() // 3)),
+                )
+                focused = True
+            except Exception:
+                pass
+
+        try:
+            window.set_focus()
             focused = True
         except Exception:
             pass
@@ -215,31 +233,11 @@ class NotepadAutomation:
         except Exception:
             pass
 
-        for control_type in ("Document", "Edit"):
-            try:
-                controls = window.descendants(control_type=control_type)
-            except Exception:
-                controls = []
-
-            for control in controls:
-                try:
-                    rect = control.rectangle()
-                except Exception:
-                    continue
-                if rect.width() < 100 or rect.height() < 60:
-                    continue
-                try:
-                    control.click_input()
-                    sleep(0.2)
-                    return True
-                except Exception:
-                    continue
-
         try:
             rect = window.rectangle()
             pyautogui.click(
                 rect.left + rect.width() // 2,
-                rect.top + max(90, rect.height() // 2),
+                rect.top + min(220, max(120, rect.height() // 3)),
             )
             sleep(0.2)
             return True
