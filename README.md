@@ -91,12 +91,19 @@ The implementation uses a cascade:
 
 2. **OpenCV candidate detection**
    - Finds icon-like visual regions from edges and contours.
-   - Used for annotation and as the search space for fallback methods.
+   - Runs localized OCR around each candidate so tiny desktop labels are read
+     from smaller, enhanced crops instead of only from the full screenshot.
 
 3. **Template matching fallback**
    - Optional `--template` image can be used when OCR is unavailable.
    - This is deliberately a fallback because exact icon templates are brittle
      across Windows themes, scaling, and icon sizes.
+
+4. **Windows UI Automation fallback**
+   - If visual OCR/template matching fail, reads the desktop item rectangle from
+     Windows UI Automation and still returns a grounded screen coordinate.
+   - This is a last resort for noisy wallpapers or low-contrast labels; the
+     visual path remains first.
 
 The structure is inspired by modern high-resolution GUI grounding work such as
 ScreenSpot-Pro / ScreenSeekeR: reduce the search space first, then do finer
@@ -155,7 +162,5 @@ Failure cases:
 Improvements with more time:
 
 - Add CLIP/OWL-ViT scoring over icon candidates for text-free semantic grounding.
-- Add Windows UI Automation as a non-vision diagnostic fallback, while keeping
-  visual grounding as the primary path.
 - Support multiple monitors and arbitrary resolutions.
 - Add a calibration step that records current icon size and text contrast.

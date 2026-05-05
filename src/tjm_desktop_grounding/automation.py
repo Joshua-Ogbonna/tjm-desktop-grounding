@@ -18,7 +18,12 @@ class NotepadAutomation:
     def show_desktop(self) -> None:
         import pyautogui
 
-        pyautogui.hotkey("win", "m")
+        try:
+            import win32com.client
+
+            win32com.client.Dispatch("Shell.Application").MinimizeAll()
+        except Exception:
+            pyautogui.hotkey("win", "m")
         sleep(1.2)
 
     def launch_from_grounding(self, result: GroundingResult) -> None:
